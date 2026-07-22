@@ -1,0 +1,263 @@
+---
+# FinSight Rule Engine Configuration
+# Rules are evaluated in order; first matching BLOCK rule wins.
+# All thresholds are tunable without code changes.
+
+version: "1.0.0"
+updated_at: "2024-01-01"
+
+rules:
+  # ─────────────────── Velocity Rules ───────────────────
+  - id: VEL-001
+    name: high_velocity_1min
+    description: "More than 5 transactions in 1 minute from same card"
+    category: velocity
+    severity: HIGH
+    action: BLOCK
+    enabled: true
+    conditions:
+      field: card_txn_count_1min
+      operator: ">"
+      value: 5
+
+  - id: VEL-002
+    name: high_velocity_5min
+    description: "More than 15 transactions in 5 minutes from same card"
+    category: velocity
+    severity: HIGH
+    action: BLOCK
+    enabled: true
+    conditions:
+      field: card_txn_count_5min
+      operator: ">"
+      value: 15
+
+  - id: VEL-003
+    name: high_velocity_1hour
+    description: "More than 50 transactions in 1 hour from same card"
+    category: velocity
+    severity: MEDIUM
+    action: REVIEW
+    enabled: true
+    conditions:
+      field: card_txn_count_1hour
+      operator: ">"
+      value: 50
+
+  # ─────────────────── Amount Rules ───────────────────
+  - id: AMT-001
+    name: large_transaction
+    description: "Transaction amount exceeds $10,000"
+    category: amount
+    severity: HIGH
+    action: REVIEW
+    enabled: true
+    conditions:
+      field: TransactionAmt
+      operator: ">"
+      value: 10000
+
+  - id: AMT-002
+    name: very_large_transaction
+    description: "Transaction amount exceeds $50,000"
+    category: amount
+    severity: CRITICAL
+    action: BLOCK
+    enabled: true
+    conditions:
+      field: TransactionAmt
+      operator: ">"
+      value: 50000
+
+  - id: AMT-003
+    name: round_number_anomaly
+    description: "Unusually round number transactions above $1000"
+    category: amount
+    severity: LOW
+    action: REVIEW
+    enabled: true
+    conditions:
+      field: is_round_amount
+      operator: "=="
+      value: true
+      secondary:
+        field: TransactionAmt
+        operator: ">"
+        value: 1000
+
+  # ─────────────────── Geographic Rules ───────────────────
+  - id: GEO-001
+    name: impossible_travel
+    description: "Transaction from location impossible to reach since last transaction"
+    category: geography
+    severity: CRITICAL
+    action: BLOCK
+    enabled: true
+    conditions:
+      field: impossible_travel
+      operator: "=="
+      value: true
+
+  - id: GEO-002
+    name: country_mismatch
+    description: "Transaction country differs from card issuing country"
+    category: geography
+    severity: MEDIUM
+    action: REVIEW
+    enabled: true
+    conditions:
+      field: country_mismatch
+      operator: "=="
+      value: true
+
+  - id: GEO-003
+    name: high_risk_country
+    description: "Transaction originating from high-risk jurisdiction"
+    category: geography
+    severity: HIGH
+    action: REVIEW
+    enabled: true
+    conditions:
+      field: addr1
+      operator: "in"
+      value: [60, 61, 62, 63, 64]  # High-risk addr1 codes (illustrative)
+
+  # ─────────────────── Time Rules ───────────────────
+  - id: TIME-001
+    name: late_night_high_value
+    description: "High-value transaction between 2am and 5am"
+    category: time
+    severity: MEDIUM
+    action: REVIEW
+    enabled: true
+    conditions:
+      field: is_night_transaction
+      operator: "=="
+      value: true
+      secondary:
+        field: TransactionAmt
+        operator: ">"
+        value: 500
+
+  # ─────────────────── Blacklist Rules ───────────────────
+  - id: BL-001
+    name: card_blacklist
+    description: "Card number appears on known fraud blacklist"
+    category: blacklist
+    severity: CRITICAL
+    action: BLOCK
+    enabled: true
+    conditions:
+      field: card_blacklisted
+      operator: "=="
+      value: true
+
+  - id: BL-002
+    name: merchant_blacklist
+    description: "Merchant appears on known fraud blacklist"
+    category: blacklist
+    severity: CRITICAL
+    action: BLOCK
+    enabled: true
+    conditions:
+      field: merchant_blacklisted
+      operator: "=="
+      value: true
+
+  - id: BL-003
+    name: customer_blacklist
+    description: "Customer appears on known fraud blacklist"
+    category: blacklist
+    severity: CRITICAL
+    action: BLOCK
+    enabled: true
+    conditions:
+      field: customer_blacklisted
+      operator: "=="
+      value: true
+
+  # ─────────────────── Behavioral Rules ───────────────────
+  - id: BEH-001
+    name: repeated_failures
+    description: "More than 3 failed transactions in last 30 minutes"
+    category: behavior
+    severity: HIGH
+    action: REVIEW
+    enabled: true
+    conditions:
+      field: failed_txn_count_30min
+      operator: ">"
+      value: 3
+
+  - id: BEH-002
+    name: amount_deviation
+    description: "Transaction amount more than 5x the card's 30-day average"
+    category: behavior
+    severity: MEDIUM
+    action: REVIEW
+    enabled: true
+    conditions:
+      field: amount_vs_avg_ratio
+      operator: ">"
+      value: 5.0
+
+  - id: BEH-003
+    name: first_international_transaction
+    description: "First international transaction for this card"
+    category: behavior
+    severity: LOW
+    action: REVIEW
+    enabled: true
+    conditions:
+      field: first_international
+      operator: "=="
+      value: true
+
+  # ─────────────────── Email/Device Rules ───────────────────
+  - id: DEV-001
+    name: suspicious_email_domain
+    description: "Email from known disposable/suspicious domain"
+    category: device
+    severity: MEDIUM
+    action: REVIEW
+    enabled: true
+    conditions:
+      field: suspicious_email
+      operator: "=="
+      value: true
+
+  - id: DEV-002
+    name: new_device_high_value
+    description: "High-value transaction from new device/browser"
+    category: device
+    severity: MEDIUM
+    action: REVIEW
+    enabled: true
+    conditions:
+      field: DeviceType
+      operator: "=="
+      value: "new"
+      secondary:
+        field: TransactionAmt
+        operator: ">"
+        value: 200
+
+thresholds:
+  block_ml_score: 0.85
+  review_ml_score: 0.50
+  auto_allow_ml_score: 0.10
+
+blacklists:
+  cards: []
+  merchants: []
+  customers: []
+  email_domains:
+    - "tempmail.com"
+    - "throwaway.email"
+    - "guerrillamail.com"
+    - "mailinator.com"
+    - "10minutemail.com"
+
+suspicious_email_patterns:
+  - "^.{1,3}@"          # Very short local part
+  - "\\d{6,}@"          # Long number sequences

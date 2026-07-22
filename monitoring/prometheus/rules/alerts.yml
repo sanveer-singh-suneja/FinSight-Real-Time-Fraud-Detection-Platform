@@ -1,0 +1,48 @@
+groups:
+  - name: finsight_alerts
+    interval: 30s
+    rules:
+      - alert: HighFraudRate
+        expr: rate(finsight_decisions_total{decision="BLOCK"}[5m]) / rate(finsight_predictions_total[5m]) > 0.15
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High fraud rate detected"
+          description: "Fraud block rate exceeds 15% over the last 5 minutes."
+
+      - alert: HighAPILatency
+        expr: histogram_quantile(0.95, rate(finsight_api_request_latency_seconds_bucket[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API P95 latency exceeds 500ms"
+          description: "The 95th percentile API latency has exceeded 500ms for 5 minutes."
+
+      - alert: KafkaConsumerLag
+        expr: finsight_kafka_consumer_lag > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka consumer lag is high"
+          description: "Consumer lag on {{ $labels.topic }}:{{ $labels.partition }} exceeds 1000 messages."
+
+      - alert: HighErrorRate
+        expr: rate(finsight_api_requests_total{status_code=~"5.."}[5m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High API error rate"
+          description: "More than 10 server errors per second over 5 minutes."
+
+      - alert: ModelNotLoaded
+        expr: finsight_model_info == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ML model not loaded"
+          description: "The fraud detection model is not available."

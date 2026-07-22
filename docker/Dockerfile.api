@@ -1,0 +1,57 @@
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip setuptools \
+    && pip install --no-cache-dir -r requirements.txt
+
+# ─────────────────── Runtime Stage ───────────────────
+FROM python:3.12-slim AS runtime
+
+LABEL maintainer="FinSight Team <team@finsight.io>"
+LABEL description="FinSight Fraud Detection API"
+
+WORKDIR /app
+
+# Runtime system deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed packages from builder
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Non-root user
+RUN groupadd -r finsight && useradd -r -g finsight finsight \
+    && mkdir -p /app/models /app/artifacts /app/configs \
+    && chown -R finsight:finsight /app
+
+# Copy application source
+COPY --chown=finsight:finsight api/ ./api/
+COPY --chown=finsight:finsight ml/ ./ml/
+COPY --chown=finsight:finsight database/ ./database/
+COPY --chown=finsight:finsight producer/ ./producer/
+COPY --chown=finsight:finsight configs/ ./configs/
+COPY --chown=finsight:finsight migrations/ ./migrations/
+COPY --chown=finsight:finsight alembic.ini .
+
+USER finsight
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--workers", "4", "--log-level", "info", "--no-access-log"]

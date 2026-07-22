@@ -1,0 +1,198 @@
+{
+  "title": "FinSight – Fraud Detection Platform",
+  "uid": "finsight-main",
+  "version": 1,
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Fraud Rate (BLOCK %)",
+      "type": "gauge",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(finsight_decisions_total{decision=\"BLOCK\"}[5m])) / sum(rate(finsight_predictions_total[5m])) * 100",
+          "legendFormat": "Fraud Rate %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 15 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "API P95 Latency",
+      "type": "gauge",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(finsight_api_request_latency_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "P95 Latency (ms)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "max": 500,
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 200 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Predictions Per Second",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(rate(finsight_predictions_total[1m]))",
+          "legendFormat": "TPS"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "color": { "mode": "thresholds" } }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Kafka Consumer Lag",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(finsight_kafka_consumer_lag)",
+          "legendFormat": "Total Lag"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 1000 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Decision Distribution",
+      "type": "piechart",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(finsight_decisions_total) by (decision)",
+          "legendFormat": "{{decision}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Fraud Score Distribution",
+      "type": "histogram",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(finsight_fraud_score_bucket[5m])) by (le)",
+          "legendFormat": "{{le}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "API Request Rate by Status",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(finsight_api_requests_total[1m])) by (status_code)",
+          "legendFormat": "HTTP {{status_code}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Rule Hits by Category",
+      "type": "bargauge",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "topk(10, sum(finsight_rule_hits_total) by (rule_id))",
+          "legendFormat": "{{rule_id}}"
+        }
+      ],
+      "options": { "orientation": "horizontal" }
+    },
+    {
+      "id": 9,
+      "title": "Prediction Latency (P50/P95/P99)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(finsight_prediction_latency_seconds_bucket[5m])) * 1000",
+          "legendFormat": "P50 (ms)"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(finsight_prediction_latency_seconds_bucket[5m])) * 1000",
+          "legendFormat": "P95 (ms)"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(finsight_prediction_latency_seconds_bucket[5m])) * 1000",
+          "legendFormat": "P99 (ms)"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Active API Requests",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "finsight_active_requests",
+          "legendFormat": "Active Requests"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Kafka Messages Produced / Consumed",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(finsight_kafka_messages_produced_total[1m])) by (topic)",
+          "legendFormat": "Produced: {{topic}}"
+        },
+        {
+          "expr": "sum(rate(finsight_kafka_messages_consumed_total[1m])) by (topic)",
+          "legendFormat": "Consumed: {{topic}}"
+        }
+      ]
+    }
+  ]
+}

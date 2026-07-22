@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "finsight"
+version = "1.0.0"
+description = "FinSight - Enterprise Real-Time Fraud Detection Platform"
+authors = [{ name = "FinSight Team", email = "team@finsight.io" }]
+license = { file = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.12"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["api*", "consumer*", "producer*", "ml*", "database*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
+ignore = ["E501", "B008", "N803", "N806"]
+
+[tool.ruff.isort]
+known-first-party = ["api", "consumer", "producer", "ml", "database"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+ignore_missing_imports = true
+disallow_untyped_defs = true
+warn_return_any = false
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-v --cov=api --cov=consumer --cov=ml --cov=database --cov-report=term-missing --cov-report=html:reports/coverage"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.coverage.run]
+omit = ["tests/*", "*/migrations/*", "scripts/*"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true

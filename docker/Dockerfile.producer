@@ -1,0 +1,25 @@
+FROM python:3.12-slim
+
+LABEL maintainer="FinSight Team <team@finsight.io>"
+LABEL description="FinSight Transaction Producer Simulator"
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir kafka-python numpy faker structlog
+
+RUN groupadd -r finsight && useradd -r -g finsight finsight \
+    && chown -R finsight:finsight /app
+
+COPY --chown=finsight:finsight producer/ ./producer/
+COPY --chown=finsight:finsight configs/ ./configs/
+COPY --chown=finsight:finsight api/metrics.py ./api/metrics.py
+
+USER finsight
+
+CMD ["python", "-m", "producer.main"]

@@ -1,0 +1,186 @@
+name: FinSight CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  # ─────────────────── Lint & Test ───────────────────
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dev dependencies
+        run: |
+          pip install --upgrade pip
+          pip install ruff mypy
+
+      - name: Run Ruff linter
+        run: ruff check . --output-format=github
+
+      - name: Run Ruff formatter check
+        run: ruff format --check .
+
+  test:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: finsight
+          POSTGRES_PASSWORD: finsight_secret
+          POSTGRES_DB: finsight_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      POSTGRES_USER: finsight
+      POSTGRES_PASSWORD: finsight_secret
+      POSTGRES_DB: finsight_test
+      POSTGRES_HOST: localhost
+      APP_ENV: development
+      SECRET_KEY: test-secret-key-32-characters-long
+      KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+      MODEL_PATH: tests/fixtures/models
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          pytest tests/ \
+            --cov=api \
+            --cov=ml \
+            --cov=database \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            -v \
+            --timeout=60
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+
+  # ─────────────────── Docker Build ───────────────────
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    strategy:
+      matrix:
+        service: [api, consumer, producer, ml]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        run: |
+          IMAGE=${{ env.REGISTRY }}/finsight-${{ matrix.service }}:${{ env.IMAGE_TAG }}
+          LATEST=${{ env.REGISTRY }}/finsight-${{ matrix.service }}:latest
+
+          docker build \
+            -f docker/Dockerfile.${{ matrix.service }} \
+            -t $IMAGE \
+            -t $LATEST \
+            .
+
+          docker push $IMAGE
+          docker push $LATEST
+
+  # ─────────────────── Deploy ───────────────────
+  deploy:
+    name: Deploy to AWS EC2
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /opt/finsight
+
+            # Pull latest images
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
+              docker login --username AWS --password-stdin ${{ env.REGISTRY }}
+
+            export IMAGE_TAG=${{ env.IMAGE_TAG }}
+            docker compose pull
+
+            # Rolling update (zero-downtime)
+            docker compose up -d --no-deps --scale api=2 api
+            sleep 30
+            docker compose up -d --no-deps --scale api=1 api
+            docker compose up -d --no-deps consumer
+            docker compose up -d --no-deps producer
+
+            # Health check
+            sleep 15
+            curl -f http://localhost/health || (echo "Health check failed" && exit 1)
+
+            # Cleanup old images
+            docker image prune -f
+
+      - name: Notify deployment
+        if: always()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "FinSight deployment ${{ job.status }} for commit ${{ github.sha }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
